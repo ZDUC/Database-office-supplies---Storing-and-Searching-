@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="vi">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tìm Kiếm Ảnh</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            text-align: center;
+            background: #f4f4f4;
+            margin: 0;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 800px;
+            /* ⬆ Tăng kích thước container */
+            margin: auto;
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0px 4px 8px rgba(0, 0, 0, 0.2);
+        }
+
+        input {
+            margin: 10px 0;
+            padding: 10px;
+            font-size: 16px;
+        }
+
+        button {
+            background: #007bff;
+            color: white;
+            padding: 12px 18px;
+            border: none;
+            cursor: pointer;
+            border-radius: 5px;
+            font-size: 16px;
+        }
+
+        button:hover {
+            background: #0056b3;
+        }
+
+        #uploaded-preview img {
+            max-width: 100%;
+            margin-top: 15px;
+            border-radius: 5px;
+            border: 2px solid #ddd;
+            padding: 5px;
+        }
+
+        .image-grid {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 15px;
+            margin-top: 15px;
+        }
+
+        .image-item {
+            text-align: center;
+        }
+
+        .image-item img {
+            width: 200px;
+            /* ⬆ Ảnh lớn hơn */
+            height: 200px;
+            object-fit: cover;
+            border: 3px solid #ccc;
+            border-radius: 5px;
+        }
+
+        .similarity-score {
+            font-size: 16px;
+            font-weight: bold;
+            color: black;
+            margin-top: 5px;
+        }
+    </style>
+</head>
+
+
+<body>
+    <div class="container">
+        <h1>🔍 Tìm kiếm ảnh giống nhau</h1>
+
+        <label for="upload">Chọn ảnh:</label>
+        <input type="file" id="upload" accept="image/*" title="Chọn ảnh để tìm kiếm">
+
+        <button onclick="searchImage()">🔍 Tìm kiếm</button>
+
+        <div id="uploaded-preview"></div>
+
+        <h2>Kết quả:</h2>
+        <div id="result-images" class="image-grid"></div>
+    </div>
+
+    <script>
+        function searchImage() {
+            let fileInput = document.getElementById("upload");
+            if (!fileInput.files.length) {
+                alert("Vui lòng chọn một ảnh trước!");
+                return;
+            }
+
+            let file = fileInput.files[0];
+            let formData = new FormData();
+            formData.append("file", file);
+
+            // Hiển thị ảnh đã chọn
+            let previewDiv = document.getElementById("uploaded-preview");
+            previewDiv.innerHTML = `<h3>Ảnh tải lên:</h3>`;
+            let img = document.createElement("img");
+            img.src = URL.createObjectURL(file);
+            previewDiv.appendChild(img);
+
+            // Gửi ảnh đến backend
+            fetch("http://127.0.0.1:5000/search", {
+                method: "POST",
+                body: formData
+            })
+                .then(response => response.json())
+                .then(data => {
+                    console.log("📊 Dữ liệu JSON nhận được:", data);
+
+                    let resultDiv = document.getElementById("result-images");
+                    resultDiv.innerHTML = "";
+
+                    data.forEach(item => {
+                        let imgElem = document.createElement("img");
+                        imgElem.src = item.image_url;
+                        imgElem.alt = "Ảnh tương tự";
+                        imgElem.classList.add("image-item");
+
+                        let scoreText = document.createElement("p");
+                        scoreText.textContent = `🔹 Độ tương đồng: ${(item.score * 100).toFixed(2)}%`;
+                        scoreText.classList.add("similarity-score");
+
+                        let container = document.createElement("div");
+                        container.classList.add("image-item");
+                        container.appendChild(imgElem);
+                        container.appendChild(scoreText);
+
+                        resultDiv.appendChild(container);
+                    });
+                })
+                .catch(error => {
+                    console.error("❌ Lỗi khi tìm kiếm ảnh:", error);
+                });
+        }
+    </script>
+</body>
+
+</html>
