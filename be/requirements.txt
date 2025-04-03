@@ -1,0 +1,9 @@
+Flask
+flask-cors
+torch
+torchvision
+pillow
+numpy
+pymongo
+scikit-learn
+scipy
