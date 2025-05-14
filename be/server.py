@@ -1,133 +1,172 @@
-from flask import Flask, request, jsonify, send_from_directory
 import os
-import torch
-import torchvision.transforms as transforms
-from torchvision.models import resnet50, ResNet50_Weights
-from PIL import Image
+import io
+import cv2
 import numpy as np
-from pymongo import MongoClient
-from sklearn.metrics.pairwise import cosine_similarity
+from flask import Flask, request, jsonify, send_file
 from flask_cors import CORS
+from PIL import Image
+from pymongo import MongoClient
+from skimage.feature import graycomatrix, graycoprops, local_binary_pattern
+from skimage.segmentation import chan_vese
+from sklearn.metrics.pairwise import cosine_similarity
 
+# ===== Khởi tạo Flask và CORS =====
 app = Flask(__name__)
 CORS(app)
 
-# 🔗 Kết nối MongoDB
-MONGO_URI = "mongodb+srv://zeros0000:d21httt06@database0.d6lmc.mongodb.net/?retryWrites=true&w=majority&appName=Database0"
+# ===== Cấu hình MongoDB =====
+MONGO_URI = (
+    "mongodb+srv://zeros0000:d21httt06@database0.d6lmc.mongodb.net/"
+    "?retryWrites=true&w=majority&appName=Database0"
+)
 client = MongoClient(MONGO_URI)
 db = client["Database0"]
-features_collection = db["image_features"]
+collection = db["image_features_four"]
 
-# 📷 Thư mục chứa ảnh
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-IMAGE_FOLDER = os.path.join(BASE_DIR, "dataset_resized")
+# ===== Thư mục lưu ảnh =====
+DATASET_PATH = "dataset_resized"
+TARGET_SIZE = (224, 224)
 
-# 🚀 Load mô hình ResNet50
-model = resnet50(weights=ResNet50_Weights.IMAGENET1K_V1)
-model = torch.nn.Sequential(*list(model.children())[:-1])  # Bỏ lớp Fully Connected
-model.eval()
+# ===== Trọng số đặc trưng (đã đồng bộ với code mới) =====
+WEIGHT_COLOR = 0.4
+WEIGHT_TEXTURE = 0.4
+WEIGHT_SHAPE = 0.2
 
-# 🎨 Tiền xử lý ảnh
-transform = transforms.Compose([
-    transforms.Resize((256, 256)),   # Resize ảnh về 256x256 trước
-    transforms.CenterCrop(224),      # Cắt chính giữa ảnh để đảm bảo kích thước 224x224
-    transforms.ToTensor(),           
-    transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]) # Chuẩn hóa giống ImageNet
-])
+def extract_color_features(image):
+    # Kiểm tra và chuyển đổi ảnh đầu vào
+    if len(image.shape) == 2:  # Nếu ảnh grayscale
+        image = cv2.cvtColor(image, cv2.COLOR_GRAY2BGR)
+    
+    # Chuyển sang HSV
+    hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
+    
+    # Histogram của từng kênh HSV
+    h_hist = cv2.calcHist([hsv], [0], None, [8], [0, 180]).flatten()
+    s_hist = cv2.calcHist([hsv], [1], None, [8], [0, 256]).flatten()
+    v_hist = cv2.calcHist([hsv], [2], None, [8], [0, 256]).flatten()
 
-def extract_feature(image_path):
-    """Trích xuất đặc trưng từ ảnh."""
+    # Thống kê màu sắc
+    (b, g, r) = cv2.split(image)
+    color_stats = [
+        np.mean(b), np.std(b), 
+        np.mean(g), np.std(g), 
+        np.mean(r), np.std(r),
+        np.mean(hsv[:,:,0]), np.std(hsv[:,:,0]),
+        np.mean(hsv[:,:,1]), np.std(hsv[:,:,1]),
+        np.mean(hsv[:,:,2]), np.std(hsv[:,:,2])
+    ]
+    
+    features = np.concatenate([h_hist, s_hist, v_hist, color_stats])
+    return features
+
+def extract_texture_features(image):
+    if len(image.shape) == 3:
+        gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    else:
+        gray = image
+    
+    # GLCM
+    glcm = graycomatrix(gray, distances=[1], angles=[0], levels=256, symmetric=True, normed=True)
+    contrast = graycoprops(glcm, 'contrast')[0, 0]
+    dissimilarity = graycoprops(glcm, 'dissimilarity')[0, 0]
+    homogeneity = graycoprops(glcm, 'homogeneity')[0, 0]
+    energy = graycoprops(glcm, 'energy')[0, 0]
+    correlation = graycoprops(glcm, 'correlation')[0, 0]
+    asm = graycoprops(glcm, 'ASM')[0, 0]
+    
+    # LBP
+    radius = 1
+    n_points = 8 * radius
+    lbp = local_binary_pattern(gray, n_points, radius, method='uniform')
+    lbp_hist, _ = np.histogram(lbp, bins=np.arange(0, n_points + 3), range=(0, n_points + 2))
+    lbp_hist = lbp_hist.astype("float") / (lbp_hist.sum() + 1e-7)
+    
+    return np.array([contrast, dissimilarity, homogeneity, energy, correlation, asm] + lbp_hist.tolist())
+
+def extract_shape_features(image):
+    if len(image.shape) == 3:
+        gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    else:
+        gray = image
+    
+    # Phân đoạn ảnh với xử lý lỗi
     try:
-        image = Image.open(image_path).convert("RGB")
-        image = transform(image).unsqueeze(0)
+        segmented = chan_vese(gray, max_iter=100, dt=0.5, extended_output=False)
+        segmented = (segmented * 255).astype(np.uint8)
+    except:
+        segmented = gray
+    
+    # Tìm contour
+    contours, _ = cv2.findContours(segmented, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    if not contours:
+        return np.zeros(14)  # Số lượng features shape
+    
+    largest_contour = max(contours, key=cv2.contourArea)
+    
+    # Hu Moments
+    moments = cv2.moments(largest_contour)
+    hu = cv2.HuMoments(moments).flatten()
+    
+    # Hình dạng
+    area = cv2.contourArea(largest_contour)
+    perimeter = cv2.arcLength(largest_contour, True)
+    circularity = (4 * np.pi * area) / (perimeter**2 + 1e-7) if perimeter > 0 else 0
+    
+    hull = cv2.convexHull(largest_contour)
+    hull_area = cv2.contourArea(hull)
+    solidity = area / (hull_area + 1e-7) if hull_area > 0 else 0
+    
+    # Biên Canny
+    edges = cv2.Canny(segmented, 100, 200)
+    edge_density = np.sum(edges > 0) / edges.size
+    
+    return np.concatenate([hu, [area, perimeter, circularity, solidity, edge_density]])
 
-        with torch.no_grad():
-            feature = model(image).squeeze().numpy()
-        return feature
-    except Exception as e:
-        print(f"❌ Lỗi đọc ảnh {image_path}: {e}")
-        return None
+def normalize_features(features):
+    mean = np.mean(features)
+    std = np.std(features)
+    return (features - mean) / (std + 1e-7)
 
-def ensure_features_in_db():
-    """Kiểm tra và lưu đặc trưng của ảnh vào MongoDB nếu chưa có."""
-    if features_collection.count_documents({}) > 0:
-        print("✅ Đã có dữ liệu trong MongoDB.")
-        return
+# ===== ROUTE PHỤC VỤ ẢNH =====
+@app.route('/dataset_resized/<path:filename>')
+def serve_image(filename):
+    path = os.path.join(DATASET_PATH, filename)
+    if os.path.exists(path):
+        return send_file(path)
+    return "File not found", 404
 
-    print("🔍 Đang trích xuất và lưu đặc trưng ảnh vào MongoDB...")
-    for filename in os.listdir(IMAGE_FOLDER):
-        image_path = os.path.join(IMAGE_FOLDER, filename)
-        feature = extract_feature(image_path)
-        if feature is not None:
-            features_collection.insert_one({
-                "image_path": filename,  # Chỉ lưu tên file để tránh lỗi đường dẫn
-                "feature": feature.tolist()
-            })
-    print("✅ Hoàn thành việc lưu đặc trưng ảnh.")
-
-def find_top_3_similar(image_path):
-    """Tìm 3 ảnh giống nhất mà không bị trùng."""
-    print("📥 Đang tìm kiếm ảnh tương tự...")
-    input_feature = extract_feature(image_path)
-    if input_feature is None:
-        return []
-
-    # Lấy tất cả ảnh từ MongoDB
-    stored_images = list(features_collection.find({}, {"image_path": 1, "feature": 1, "_id": 0}))
-    if not stored_images:
-        print("⚠ Không tìm thấy dữ liệu trong MongoDB!")
-        return []
-
-    similarities = []
-    seen_images = set()  # Dùng để tránh ảnh trùng
-
-    for img in stored_images:
-        img_path = img["image_path"].replace("\\", "/")  # Chuẩn hóa đường dẫn
-        if img_path in seen_images:  # Nếu ảnh đã xét trước đó, bỏ qua
-            continue
-
-        stored_feature = np.array(img["feature"])
-        similarity = cosine_similarity([input_feature], [stored_feature])[0][0]
-
-        similarities.append((img_path, similarity))
-        seen_images.add(img_path)  # Đánh dấu ảnh đã xử lý
-
-    # Sắp xếp theo độ tương đồng giảm dần
-    similarities.sort(key=lambda x: x[1], reverse=True)
-
-    # Lấy top 3 ảnh không trùng
-    top_3_images = [{"image_url": f"/{img[0]}", "score": round(img[1], 4)} for img in similarities[:3]]
-
-    return top_3_images
-
-
-@app.route("/dataset_resized/<path:filename>")
-def get_image(filename):
-    """Phục vụ ảnh từ dataset_resized."""
-    return send_from_directory(IMAGE_FOLDER, filename)
-
-@app.route("/search", methods=["POST"])
+# ===== ROUTE TÌM KIẾM ẢNH =====
+@app.route('/search', methods=['POST'])
 def search():
-    # Kiểm tra file gửi đến
-    if "file" not in request.files:
-        return jsonify({"error": "Không có file được tải lên"}), 400
+    if 'file' not in request.files:
+        return jsonify({'error': 'Không có file được gửi'}), 400
 
-    file = request.files["file"]
-    if file.filename == "":
-        return jsonify({"error": "Không có file nào được chọn"}), 400
+    file = request.files['file']
+    img_pil = Image.open(io.BytesIO(file.read())).convert('RGB')
+    img = cv2.cvtColor(np.array(img_pil), cv2.COLOR_RGB2BGR)
+    img = cv2.resize(img, TARGET_SIZE)
+    
+    # Trích xuất đặc trưng
+    f_color = extract_color_features(img)
+    f_texture = extract_texture_features(img)
+    f_shape = extract_shape_features(img)
+    
+    # Gán trọng số và chuẩn hóa
+    features = np.concatenate([
+        WEIGHT_COLOR * normalize_features(f_color),
+        WEIGHT_TEXTURE * normalize_features(f_texture),
+        WEIGHT_SHAPE * normalize_features(f_shape)
+    ])
 
-    # 🔍 Tìm ảnh tương tự
-    top_3_results = find_top_3_similar(file)
+    # So sánh với database
+    results = []
+    for doc in collection.find():
+        db_feat = np.array(doc['features'])
+        score = cosine_similarity([features], [db_feat])[0][0]
+        results.append({'image_url': doc['image_path'].replace('\\', '/'), 'score': float(score)})
 
-    # 🛠 Chuyển np.float64 → float và thêm domain vào image_url
-    for item in top_3_results:
-        item["score"] = float(item["score"])  # Chuyển numpy float64 thành float
-        item["image_url"] = f"http://127.0.0.1:5000{item['image_url']}"  # Thêm domain đầy đủ
+    results.sort(key=lambda x: x['score'], reverse=True)
+    return jsonify(results[:3])
 
-    print(f"📤 Kết quả gửi về frontend: {top_3_results}")
-
-    return jsonify(top_3_results)
-
-if __name__ == "__main__":
-    ensure_features_in_db()
+if __name__ == '__main__':
     app.run(debug=True)

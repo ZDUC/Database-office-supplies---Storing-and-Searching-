@@ -129,9 +129,10 @@
                     let resultDiv = document.getElementById("result-images");
                     resultDiv.innerHTML = "";
 
+                    // Hiển thị 3 ảnh giống nhất
                     data.forEach(item => {
                         let imgElem = document.createElement("img");
-                        imgElem.src = item.image_url;
+                        imgElem.src = "http://127.0.0.1:5000/" + item.image_url;
                         imgElem.alt = "Ảnh tương tự";
                         imgElem.classList.add("image-item");
 
