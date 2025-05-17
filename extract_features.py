@@ -8,7 +8,7 @@ import math
 MONGO_URI = "mongodb+srv://zeros0000:d21httt06@database0.d6lmc.mongodb.net/?retryWrites=true&w=majority&appName=Database0"
 client = MongoClient(MONGO_URI)
 db = client["Database0"]
-collection = db["image_features_0"]
+collection = db["image_features_6"]
 
 # Thư mục ảnh
 DATASET_PATH = "dataset_resized"
@@ -173,15 +173,30 @@ def extract_shape_features(binary):
     cx = m10 / m00
     cy = m01 / m00
     
-    # Tính central moments
-    mu20 = ((x - cx)**2 * binary).sum() / m00
-    mu02 = ((y - cy)**2 * binary).sum() / m00
-    mu11 = ((x - cx) * (y - cy) * binary).sum() / m00
+    # Tính central moments (7 Hu moments)
+    mu20 = ((x - cx)**2 * binary).sum()
+    mu02 = ((y - cy)**2 * binary).sum()
+    mu11 = ((x - cx) * (y - cy) * binary).sum()
+    mu30 = ((x - cx)**3 * binary).sum()
+    mu03 = ((y - cy)**3 * binary).sum()
+    mu12 = ((x - cx) * (y - cy)**2 * binary).sum()
+    mu21 = ((x - cx)**2 * (y - cy) * binary).sum()
     
-    # Tính Hu moments (đơn giản hóa)
+    # Tính 7 Hu moments
     hu1 = mu20 + mu02
     hu2 = (mu20 - mu02)**2 + 4*mu11**2
-    hu = [hu1, hu2] + [0]*5  # Giả lập 7 Hu moments
+    hu3 = (mu30 - 3*mu12)**2 + (3*mu21 - mu03)**2
+    hu4 = (mu30 + mu12)**2 + (mu21 + mu03)**2
+    hu5 = (mu30 - 3*mu12)*(mu30 + mu12)*((mu30 + mu12)**2 - 3*(mu21 + mu03)**2) + \
+          (3*mu21 - mu03)*(mu21 + mu03)*(3*(mu30 + mu12)**2 - (mu21 + mu03)**2)
+    hu6 = (mu20 - mu02)*((mu30 + mu12)**2 - (mu21 + mu03)**2) + \
+          4*mu11*(mu30 + mu12)*(mu21 + mu03)
+    hu7 = (3*mu21 - mu03)*(mu30 + mu12)*((mu30 + mu12)**2 - 3*(mu21 + mu03)**2) - \
+          (mu30 - 3*mu12)*(mu21 + mu03)*(3*(mu30 + mu12)**2 - (mu21 + mu03)**2)
+    
+    # Log scale để giảm độ lớn
+    hu = np.array([hu1, hu2, hu3, hu4, hu5, hu6, hu7])
+    hu = -np.sign(hu) * np.log10(np.abs(hu) + 1e-10)
     
     # Tính diện tích và chu vi
     area = m00
