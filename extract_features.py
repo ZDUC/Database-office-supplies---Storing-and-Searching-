@@ -19,8 +19,9 @@ WEIGHT_COLOR = 0.2
 WEIGHT_TEXTURE = 0.35
 WEIGHT_SHAPE = 0.45
 
-# ===== Các hàm trích xuất đặc trưng CODE CHAY =====
+# ===== Các hàm trích xuất đặc trưng =====
 
+# ====== Hàm chuyển RGB sang HSV ======
 def rgb_to_hsv(r, g, b):
     r, g, b = r/255.0, g/255.0, b/255.0
     mx = max(r, g, b)
@@ -39,12 +40,14 @@ def rgb_to_hsv(r, g, b):
     v = mx
     return h, s, v
 
+# ====== Hàm tính moment (trung bình, độ lệch chuẩn, độ lệch tâm) ======
 def calculate_moments(channel):
     mean = np.mean(channel)
     std = np.std(channel)
     skew = np.mean((channel - mean) ** 3) / (std ** 3 + 1e-10) if std > 0 else 0
     return mean, std, skew
 
+# ====== Hàm trích xuất đặc trưng màu ======
 def extract_color_features(image):
     # Chuyển ảnh sang HSV thủ công
     hsv = np.zeros_like(image, dtype=float)
@@ -84,6 +87,7 @@ def extract_color_features(image):
         h_hist, s_hist, v_hist
     ])
 
+# ====== Hàm phát hiện biên bằng Sobel ======
 def sobel_edge_detection(gray):
     kernel_x = np.array([[-1, 0, 1], [-2, 0, 2], [-1, 0, 1]])
     kernel_y = np.array([[-1, -2, -1], [0, 0, 0], [1, 2, 1]])
@@ -103,6 +107,7 @@ def sobel_edge_detection(gray):
     edges = np.sqrt(edges_x**2 + edges_y**2)
     return edges
 
+# ====== Hàm trích xuất đặc trưng kết cấu ======
 def extract_texture_features(gray):
     # Đảm bảo giá trị pixel nằm trong khoảng 0-255
     gray = (gray - gray.min()) * (255.0 / (gray.max() - gray.min() + 1e-10))
@@ -151,6 +156,7 @@ def extract_texture_features(gray):
         lbp_hist
     ])
 
+# ====== Hàm trích xuất đặc trưng hình dạng ======
 def extract_shape_features(binary):
     # Đảm bảo binary là 0 hoặc 1
     binary = (binary > 0).astype(np.uint8)
@@ -225,6 +231,7 @@ def extract_shape_features(binary):
         [0]*7  # Giả lập Zernike moments
     ])
 
+# ====== Hàm chuẩn hóa đặc trưng về khoảng [0,1] ======
 def normalize_features(features):
     min_val = features.min()
     max_val = features.max()
