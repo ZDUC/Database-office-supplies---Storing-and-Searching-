@@ -4,10 +4,10 @@ from pymongo import MongoClient
 from PIL import Image
 import pickle
 
-MONGO_URI = "mongodb+srv://vuongcp153:wF4lr3lgZSirnOrg@cdhtt.zpliqjl.mongodb.net/?retryWrites=true&w=majority&appName=cdhtt"
+MONGO_URI = "mongodb+srv://zeros0000:d21httt06@database0.d6lmc.mongodb.net/?retryWrites=true&w=majority&appName=Database0"
 client = MongoClient(MONGO_URI)
-db = client["stationery_cbir"]
-collection = db["image_features_done"]
+db = client["Database0"]
+collection = db["image_features_6"]
 
 WEIGHT_COLOR = 0.2
 WEIGHT_TEXTURE = 0.45
@@ -45,8 +45,8 @@ def save_zscore_params(mean, std, filepath="zscore_params.pkl"):
     print(f"[✓] Đã lưu tham số Z-score vào: {filepath}")
 
 def main():
-    source_collection_name = "image_features_done"
-    target_collection_name = "normalize_features_final"
+    source_collection_name = "image_features_6"
+    target_collection_name = "6"
     zscore_param_file = "zscore_params.pkl"
 
     print("[•] Kết nối MongoDB...")

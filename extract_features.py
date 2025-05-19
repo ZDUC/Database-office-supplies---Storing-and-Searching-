@@ -5,18 +5,14 @@ from PIL import Image
 import math
 
 # Cấu hình MongoDB
-MONGO_URI = "mongodb+srv://vuongcp153:wF4lr3lgZSirnOrg@cdhtt.zpliqjl.mongodb.net/?retryWrites=true&w=majority&appName=cdhtt"
+MONGO_URI = "mongodb+srv://zeros0000:d21httt06@database0.d6lmc.mongodb.net/?retryWrites=true&w=majority&appName=Database0"
 client = MongoClient(MONGO_URI)
-db = client["stationery_cbir"]
-collection = db["image_features_done"]
+db = client["Database0"]
+collection = db["image_features_6"]
 
 # Thư mục ảnh
 DATASET_PATH = "dataset_resized"
 TARGET_SIZE = (256, 256)
-
-WEIGHT_COLOR = 0.2
-WEIGHT_TEXTURE = 0.35
-WEIGHT_SHAPE = 0.45
 
 # ===== Các hàm trích xuất đặc trưng =====
 
