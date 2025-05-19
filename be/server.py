@@ -7,16 +7,17 @@ from PIL import Image
 from pymongo import MongoClient
 import math
 from sklearn.metrics.pairwise import cosine_similarity
+import pickle
 
 # ===== Khởi tạo Flask và CORS =====
 app = Flask(__name__)
 CORS(app)
 
 # ===== Cấu hình MongoDB =====
-MONGO_URI = "mongodb+srv://zeros0000:d21httt06@database0.d6lmc.mongodb.net/?retryWrites=true&w=majority&appName=Database0"
+MONGO_URI = "mongodb+srv://vuongcp153:wF4lr3lgZSirnOrg@cdhtt.zpliqjl.mongodb.net/?retryWrites=true&w=majority&appName=cdhtt"
 client = MongoClient(MONGO_URI)
-db = client["Database0"]
-collection = db["image_features_6"]
+db = client["stationery_cbir"]
+collection = db["normalize_features_final"]
 
 # ===== Thư mục lưu ảnh =====
 DATASET_PATH = "dataset_resized"
@@ -24,8 +25,8 @@ TARGET_SIZE = (256, 256)
 
 # ===== Trọng số đặc trưng =====
 WEIGHT_COLOR = 0.2
-WEIGHT_TEXTURE = 0.35
-WEIGHT_SHAPE = 0.45
+WEIGHT_TEXTURE = 0.45
+WEIGHT_SHAPE = 0.35
 
 # ===== Các hàm trích xuất đặc trưng =====
 
@@ -251,7 +252,6 @@ def extract_shape_features(binary):
     return np.concatenate([
         hu,
         [area, perimeter, circularity, solidity],
-        [0]*7  # Giả lập Zernike moments
     ])
 
 # ====== Hàm chuẩn hóa đặc trưng về khoảng [0,1] ======
@@ -261,6 +261,13 @@ def normalize_features(features):
     if max_val - min_val > 1e-10:
         return (features - min_val) / (max_val - min_val)
     return features
+
+def zscore_normalize(features):
+    mean = features.mean(axis=0)
+    std = features.std(axis=0)
+    std[std == 0] = 1e-8 
+    normalized = (features - mean) / std
+    return normalized
 
 # ===== Route phục vụ ảnh tĩnh =====
 @app.route('/dataset_resized/<path:filename>')
@@ -278,6 +285,15 @@ def search():
     
     file = request.files['file']
     try:
+        with open("zscore_params.pkl", "rb") as f:
+            params = pickle.load(f)
+
+        color_mean = params["mean"]["color"]
+        color_std = params["std"]["color"]
+        texture_mean = params["mean"]["texture"]
+        texture_std = params["std"]["texture"]
+        shape_mean = params["mean"]["shape"]
+        shape_std = params["std"]["shape"]
         # Xử lý ảnh giống hệt như trong file extract
         img = np.array(Image.open(file.stream).convert('RGB'))
         img_pil = Image.fromarray(img).resize(TARGET_SIZE, Image.Resampling.LANCZOS)
@@ -295,21 +311,17 @@ def search():
         f_texture = extract_texture_features(gray)
         f_shape = extract_shape_features(binary)
 
-        # Áp dụng trọng số và chuẩn hóa
-        f_color_weighted = WEIGHT_COLOR * f_color
-        f_texture_weighted = WEIGHT_TEXTURE * f_texture
-        f_shape_weighted = WEIGHT_SHAPE * f_shape
-
-        f_color_normalized = normalize_features(f_color_weighted)
-        f_texture_normalized = normalize_features(f_texture_weighted)
-        f_shape_normalized = normalize_features(f_shape_weighted)
+        f_color_normalized = (f_color - np.array(color_mean)) / np.array(color_std)
+        f_texture_normalized = (f_texture - np.array(texture_mean)) / np.array(texture_std)
+        f_shape_normalized = (f_shape - np.array(shape_mean)) / np.array(shape_std)
 
         # Kết hợp các đặc trưng
         combined_query = np.concatenate([
             f_color_normalized, 
-            f_texture_normalized, 
+            f_texture_normalized , 
             f_shape_normalized
         ]).reshape(1, -1)
+
 
         # Tìm kiếm trong database
         results = []
@@ -323,7 +335,7 @@ def search():
             
             results.append({
                 "image_url": image_url,
-                "score": round(float(sim), 4)  # Làm tròn 4 chữ số thập phân
+                "score": round(float((sim + 1) * 50), 4)  # Làm tròn 4 chữ số thập phân
             })
 
         # Sắp xếp và chỉ lấy 3 kết quả giống nhất

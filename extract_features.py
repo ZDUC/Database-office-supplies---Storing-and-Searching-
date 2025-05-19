@@ -5,16 +5,15 @@ from PIL import Image
 import math
 
 # Cấu hình MongoDB
-MONGO_URI = "mongodb+srv://zeros0000:d21httt06@database0.d6lmc.mongodb.net/?retryWrites=true&w=majority&appName=Database0"
+MONGO_URI = "mongodb+srv://vuongcp153:wF4lr3lgZSirnOrg@cdhtt.zpliqjl.mongodb.net/?retryWrites=true&w=majority&appName=cdhtt"
 client = MongoClient(MONGO_URI)
-db = client["Database0"]
-collection = db["image_features_6"]
+db = client["stationery_cbir"]
+collection = db["image_features_done"]
 
 # Thư mục ảnh
 DATASET_PATH = "dataset_resized"
 TARGET_SIZE = (256, 256)
 
-# Trọng số của các đặc trưng
 WEIGHT_COLOR = 0.2
 WEIGHT_TEXTURE = 0.35
 WEIGHT_SHAPE = 0.45
@@ -243,7 +242,6 @@ def extract_shape_features(binary):
     return np.concatenate([
         hu,
         [area, perimeter, circularity, solidity],
-        [0]*7  # Giả lập Zernike moments
     ])
 
 # ====== Hàm chuẩn hóa đặc trưng về khoảng [0,1] ======
@@ -287,28 +285,29 @@ for folder in os.listdir(DATASET_PATH):
             f_texture = extract_texture_features(gray)
             f_shape = extract_shape_features(binary)
 
-            # Áp dụng trọng số
-            f_color_weighted = WEIGHT_COLOR * f_color
-            f_texture_weighted = WEIGHT_TEXTURE * f_texture
-            f_shape_weighted = WEIGHT_SHAPE * f_shape
+            # f_color_weighted = f_color * WEIGHT_COLOR
+            # f_texture_weighted = f_texture * WEIGHT_TEXTURE
+            # f_shape_weighted = f_shape * WEIGHT_SHAPE
 
             # Chuẩn hóa các đặc trưng
-            f_color_normalized = normalize_features(f_color_weighted)
-            f_texture_normalized = normalize_features(f_texture_weighted)
-            f_shape_normalized = normalize_features(f_shape_weighted)
+            # f_color_normalized = normalize_features(f_color_weighted)
+            # f_texture_normalized = normalize_features(f_texture_weighted)
+            # f_shape_normalized = normalize_features(f_shape_weighted)
 
             # Kết hợp các đặc trưng
             features_normalized = np.concatenate([
-                f_color_normalized, 
-                f_texture_normalized, 
-                f_shape_normalized
+                f_color, 
+                f_texture, 
+                f_shape
             ])
 
             # Lưu vào MongoDB
             collection.insert_one({
                 "image_path": img_path,
                 "category": folder,
-                "features": features_normalized.tolist()
+                "color_features": f_color.tolist(),
+                "texture_features": f_texture.tolist(),
+                "shape_features": f_shape.tolist(),
             })
             print("✅ Xử lý:", img_path)
         except Exception as e:
