@@ -91,26 +91,6 @@ def extract_color_features(image):
         h_hist, s_hist, v_hist
     ])
 
-# ====== Hàm phát hiện biên bằng Sobel ======
-def sobel_edge_detection(gray):
-    kernel_x = np.array([[-1, 0, 1], [-2, 0, 2], [-1, 0, 1]])
-    kernel_y = np.array([[-1, -2, -1], [0, 0, 0], [1, 2, 1]])
-    
-    # Padding ảnh
-    padded = np.pad(gray, ((1, 1), (1, 1)), mode='constant')
-    edges_x = np.zeros_like(gray)
-    edges_y = np.zeros_like(gray)
-    
-    # Áp dụng kernel Sobel
-    for i in range(gray.shape[0]):
-        for j in range(gray.shape[1]):
-            patch = padded[i:i+3, j:j+3]
-            edges_x[i, j] = np.sum(patch * kernel_x)
-            edges_y[i, j] = np.sum(patch * kernel_y)
-    
-    edges = np.sqrt(edges_x**2 + edges_y**2)
-    return edges
-
 # ====== Hàm trích xuất đặc trưng kết cấu ======
 def extract_texture_features(gray):
     # Đảm bảo giá trị pixel nằm trong khoảng 0-255
@@ -249,13 +229,6 @@ def extract_shape_features(binary):
         [area, perimeter, circularity, solidity],
     ])
 
-# ====== Hàm chuẩn hóa đặc trưng về khoảng [0,1] ======
-def normalize_features(features):
-    min_val = features.min()
-    max_val = features.max()
-    if max_val - min_val > 1e-10:
-        return (features - min_val) / (max_val - min_val)
-    return features
 
 def zscore_normalize(features):
     mean = features.mean(axis=0)

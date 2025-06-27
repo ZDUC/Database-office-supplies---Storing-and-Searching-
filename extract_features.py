@@ -14,7 +14,6 @@ collection = db["image_features_6"]
 DATASET_PATH = "dataset_resized"
 TARGET_SIZE = (256, 256)
 
-# ===== Các hàm trích xuất đặc trưng =====
 
 # ====== Hàm chuyển RGB sang HSV ======
 def rgb_to_hsv(r, g, b):
@@ -81,26 +80,6 @@ def extract_color_features(image):
         [b_mean, g_mean, r_mean],
         h_hist, s_hist, v_hist
     ])
-
-# ====== Hàm phát hiện biên bằng Sobel ======
-def sobel_edge_detection(gray):
-    kernel_x = np.array([[-1, 0, 1], [-2, 0, 2], [-1, 0, 1]])
-    kernel_y = np.array([[-1, -2, -1], [0, 0, 0], [1, 2, 1]])
-    
-    # Padding ảnh
-    padded = np.pad(gray, ((1, 1), (1, 1)), mode='constant')
-    edges_x = np.zeros_like(gray)
-    edges_y = np.zeros_like(gray)
-    
-    # Áp dụng kernel Sobel (chỉ xử lý các pixel bên trong)
-    for i in range(gray.shape[0]):
-        for j in range(gray.shape[1]):
-            patch = padded[i:i+3, j:j+3]
-            edges_x[i, j] = np.sum(patch * kernel_x)
-            edges_y[i, j] = np.sum(patch * kernel_y)
-    
-    edges = np.sqrt(edges_x**2 + edges_y**2)
-    return edges
 
 # ====== Hàm trích xuất đặc trưng kết cấu ======
 def extract_texture_features(gray):
@@ -240,14 +219,6 @@ def extract_shape_features(binary):
         [area, perimeter, circularity, solidity],
     ])
 
-# ====== Hàm chuẩn hóa đặc trưng về khoảng [0,1] ======
-def normalize_features(features):
-    min_val = features.min()
-    max_val = features.max()
-    if max_val - min_val > 1e-10:
-        return (features - min_val) / (max_val - min_val)
-    return features
-
 # ===== Quét và xử lý ảnh =====
 for folder in os.listdir(DATASET_PATH):
     folder_path = os.path.join(DATASET_PATH, folder)
@@ -280,22 +251,6 @@ for folder in os.listdir(DATASET_PATH):
             f_color = extract_color_features(img)
             f_texture = extract_texture_features(gray)
             f_shape = extract_shape_features(binary)
-
-            # f_color_weighted = f_color * WEIGHT_COLOR
-            # f_texture_weighted = f_texture * WEIGHT_TEXTURE
-            # f_shape_weighted = f_shape * WEIGHT_SHAPE
-
-            # Chuẩn hóa các đặc trưng
-            # f_color_normalized = normalize_features(f_color_weighted)
-            # f_texture_normalized = normalize_features(f_texture_weighted)
-            # f_shape_normalized = normalize_features(f_shape_weighted)
-
-            # Kết hợp các đặc trưng
-            features_normalized = np.concatenate([
-                f_color, 
-                f_texture, 
-                f_shape
-            ])
 
             # Lưu vào MongoDB
             collection.insert_one({
