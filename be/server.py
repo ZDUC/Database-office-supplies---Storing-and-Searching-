@@ -218,15 +218,12 @@ def extract_shape_features(binary):
         # Tính circularity
         circularity = (4 * np.pi * area) / (perimeter**2 + 1e-10)
         
-        # Tính solidity (đơn giản hóa)
-        hull_area = area  # Giả lập convex hull area
-        solidity = area / (hull_area + 1e-10)
     else:
-        perimeter = circularity = solidity = 0
+        perimeter = circularity = 0
     
     return np.concatenate([
         hu,
-        [area, perimeter, circularity, solidity],
+        [area, perimeter, circularity],
     ])
 
 
